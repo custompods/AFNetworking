@@ -33,24 +33,32 @@
 
 - (void)setUp {
     [super setUp];
-
+    
     //both of these manager objects should always be reachable when the tests are run
     self.domainReachability = [AFNetworkReachabilityManager managerForDomain:@"localhost"];
-
+    
     //don't use the shared manager because it retains state between tests
     //but recreate it each time in the same way that the shared manager is created
+#if (defined(__IPHONE_OS_VERSION_MIN_REQUIRED) && __IPHONE_OS_VERSION_MIN_REQUIRED >= 90000) || (defined(__MAC_OS_X_VERSION_MIN_REQUIRED) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101100)
+    struct sockaddr_in6 address;
+    bzero(&address, sizeof(address));
+    address.sin6_len = sizeof(address);
+    address.sin6_family = AF_INET6;
+    self.addressReachability = [AFNetworkReachabilityManager managerForAddress:&address];
+#else
     struct sockaddr_in address;
     bzero(&address, sizeof(address));
     address.sin_len = sizeof(address);
     address.sin_family = AF_INET;
     self.addressReachability = [AFNetworkReachabilityManager managerForAddress:&address];
+#endif
 }
 
 - (void)tearDown
 {
     [self.addressReachability stopMonitoring];
     [self.domainReachability stopMonitoring];
-
+    
     [super tearDown];
 }
 
@@ -73,17 +81,17 @@
                                  status = [note.userInfo[AFNetworkingReachabilityNotificationStatusItem] integerValue];
                                  BOOL reachable = (status == AFNetworkReachabilityStatusReachableViaWiFi
                                                    || status == AFNetworkReachabilityStatusReachableViaWWAN);
-
+                                 
                                  XCTAssert(reachable,
                                            @"Expected network to be reachable but got '%@'",
                                            AFStringFromNetworkReachabilityStatus(status));
                                  XCTAssertEqual(reachable, manager.isReachable, @"Expected status to match 'isReachable'");
-
+                                 
                                  return YES;
                              }];
-
+    
     [manager startMonitoring];
-
+    
     [self waitForExpectationsWithTimeout:5 handler:nil];
 }
 
@@ -98,20 +106,20 @@
 - (void)verifyReachabilityStatusBlockGetsCalledWithManager:(AFNetworkReachabilityManager *)manager
 {
     XCTestExpectation *expectation = [self expectationWithDescription:@"reachability status change block gets called"];
-
+    
     typeof(manager) __weak weakManager = manager;
     [manager setReachabilityStatusChangeBlock:^(AFNetworkReachabilityStatus status) {
         BOOL reachable = (status == AFNetworkReachabilityStatusReachableViaWiFi
                           || status == AFNetworkReachabilityStatusReachableViaWWAN);
-
+        
         XCTAssert(reachable, @"Expected network to be reachable but got '%@'", AFStringFromNetworkReachabilityStatus(status));
         XCTAssertEqual(reachable, weakManager.isReachable, @"Expected status to match 'isReachable'");
-
+        
         [expectation fulfill];
     }];
-
+    
     [manager startMonitoring];
-
+    
     [self waitForExpectationsWithTimeout:5 handler:^(NSError *error) {
         [manager setReachabilityStatusChangeBlock:nil];
     }];
